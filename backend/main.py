@@ -2,12 +2,16 @@ import os
 import joblib
 import numpy as np
 from fastapi import FastAPI
-from mangum import Mangum
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
+# Initialize FastAPI
 app = FastAPI()
 
+# 1. REMOVED MANGUM: This fixes the 'issubclass' TypeError
+# Vercel handles the 'app' object directly.
+
+# 2. Robust Path Loading
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_model_path(filename):
@@ -15,11 +19,14 @@ def get_model_path(filename):
 
 # Load Logistic Model and Scaler
 try:
+    # Use global variables so they stay in memory across requests
     model = joblib.load(get_model_path("loan_lr_model.joblib"))
     scaler = joblib.load(get_model_path("loan_scaler.joblib"))
     print("Successfully loaded Logistic Regression assets.")
 except Exception as e:
     print(f"Error loading models: {e}")
+    model = None
+    scaler = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +50,9 @@ class LoanInput(BaseModel):
 
 @app.post("/predict")
 def predict_loan(data: LoanInput):
+    if model is None or scaler is None:
+        return {"error": "Model not loaded on server"}, 500
+
     features = [
         data.gender, data.married, data.dependents, data.education,
         data.self_employed, data.applicant_income, data.coapplicant_income,
@@ -60,5 +70,3 @@ def predict_loan(data: LoanInput):
 @app.get("/")
 def home():
     return {"message": "Logistic Regression API is Live!"}
-
-handler = Mangum(app)
